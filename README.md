@@ -4,6 +4,8 @@ ssdeep Cluster clusters files using ssdeep as a comparison algorithm.  Results a
 the files into a directory with the files its comparable to.  A file can be in multiple groups.  I have found this tool
 to be helpful when needing to analyze a large number of samples, with an ever decreasing amount of time to do it in.
 
+Included in the resulting tar file is a .gexf file.  This can be used to visualize the results in [Gephi](https://github.com/gephi/gephi).
+
 Installation
 ============
     git clone https://github.com/bwall/ssdc.git
