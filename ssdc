@@ -79,7 +79,7 @@ if __name__ == "__main__":
     parser.add_argument('-r', '--recursive', default=False, required=False, action='store_true',
                         help="Scan paths recursively")
     parser.add_argument('-o', '--output', metavar='output', type=str, nargs='?', default="output.tar",
-                        help="Path to write the resulting tarball to (default=output.tar")
+                        help="Path to write the resulting tarball to (default=output.tar)")
 
     args = parser.parse_args()
     root_path = args.path
