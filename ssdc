@@ -1,0 +1,145 @@
+#!/usr/bin/env python2
+import pydeep
+from os.path import abspath, isfile, isdir, join
+from os import listdir
+import StringIO
+import tarfile
+import hashlib
+
+
+def enumerate_paths(path_list, recursive_scan):
+    ret_paths = []
+    while len(path_list) != 0:
+        file_path = abspath(path_list[0])
+        del path_list[0]
+        if isfile(file_path):
+            ret_paths.append(file_path)
+        elif isdir(file_path):
+            for p in listdir(file_path):
+                p = join(file_path, p)
+                if isfile(p) or (isdir(p) and recursive_scan):
+                    path_list.append(p)
+    return ret_paths
+
+
+def generate_gexf(bin_scores):
+    ids = {}
+    gexf = '<?xml version="1.0" encoding="UTF-8"?>' \
+        '<gexf xmlns="http://www.gexf.net/1.2draft" version="1.2">' \
+        '<meta lastmodifieddate="2009-03-20">' \
+        '<creator>bwall</creator>' \
+        '<description></description>' \
+        '</meta>' \
+        '<graph mode="static" defaultedgetype="directed">' \
+        '<attributes class="node" mode="static">' \
+        '<attribute id="modularity_class" title="Modularity Class" type="integer"></attribute>' \
+        '</attributes>' \
+        '<nodes>'
+
+    key_index = 0
+    for path_keys in bin_scores.keys():
+        gexf += '<node id="{0}" label="{1}">' \
+            '<attvalues><attvalue for="modularity_class" value="1"></attvalue></attvalues>' \
+            '</node>'.format(key_index, path_keys)
+        ids[path_keys] = key_index
+        key_index += 1
+
+    gexf += '</nodes>' \
+            '<edges>'
+
+    edge_index = 0
+    for path_key in bin_scores.keys():
+        for other_key in bin_scores[path_key].keys():
+            gexf += '<edge id="{0}" source="{1}" target="{2}" weight="{3}" />'.format(edge_index, ids[path_key],
+                                                                                      ids[other_key],
+                                                                                      float(bin_scores[path_key]
+                                                                                      [other_key]) / 100)
+            edge_index += 1
+
+    gexf += '</edges>' \
+            '</graph>' \
+            '</gexf>'
+
+    return gexf
+
+
+def get_version():
+    return "1.0.0"
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(
+        prog=__file__,
+        description="Clusters files based on their ssdeep hash",
+        version="%(prog)s v" + get_version() + " by Brian Wallace (@botnet_hunter)",
+        epilog="%(prog)s v" + get_version() + " by Brian Wallace (@botnet_hunter)"
+    )
+    parser.add_argument('path', metavar='path', type=str, nargs='+', help="Paths to files or directories to scan")
+    parser.add_argument('-r', '--recursive', default=False, required=False, action='store_true',
+                        help="Scan paths recursively")
+    parser.add_argument('-o', '--output', metavar='output', type=str, nargs='?', default="output.tar",
+                        help="Path to write the resulting tarball to (default=output.tar")
+
+    args = parser.parse_args()
+    root_path = args.path
+    paths = enumerate_paths(root_path, args.recursive)
+    hashes = {}
+    sha256s = {}
+
+    #hashing files
+    for path in paths:
+        hashes[path] = pydeep.hash_file(path)
+        sha256s[path] = hashlib.sha256(file(path, 'rb').read()).hexdigest()
+        print "{0}\tSHA256: {1}\tssdeep: {2}".format(path, sha256s[path], hashes[path])
+
+    matches = {}
+    scores = {}
+    for path in hashes.keys():
+        matches[path] = []
+        for other in hashes.keys():
+            if other != path:
+                score = pydeep.compare(hashes[path], hashes[other])
+                if score > 0:
+                    matches[path].append(other)
+                    if path not in scores:
+                        scores[path] = {}
+                    if other not in scores[path]:
+                        scores[path][other] = score
+
+    groups = []
+    for path in matches.keys():
+        in_a_group = False
+        for g in xrange(len(groups)):
+            if path in groups[g]:
+                in_a_group = True
+                continue
+            should_add = True
+            for h in groups[g]:
+                if h not in matches[path]:
+                    should_add = False
+            if should_add:
+                groups[g].append(path)
+                in_a_group = True
+        if not in_a_group:
+            groups.append([path])
+
+    for g in xrange(len(groups)):
+        groups[g].sort()
+
+    # Copy files to zipfile
+    with tarfile.TarFile(args.output, mode='a') as mytar:
+        for group in xrange(len(groups)):
+            for path in groups[group]:
+                mytar.add(path, arcname=join(str(group), sha256s[path]))
+        gexf_tar_file = StringIO.StringIO()
+        gexf_tar_file.write(generate_gexf(scores))
+        gexf_tar_file.seek(0)
+        info = tarfile.TarInfo(name="file_distance.gexf")
+        info.size = len(gexf_tar_file.buf)
+        mytar.addfile(tarinfo=info, fileobj=gexf_tar_file)
+
+    print "{0} files organized into {1} groups".format(len(hashes), len(groups))
+    print "Groups distribution:"
+    for group in xrange(len(groups)):
+        print "Group {0} has {1} files".format(group, len(groups[group]))
