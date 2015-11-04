@@ -1,10 +1,31 @@
 #!/usr/bin/env python2
 import pydeep
 from os.path import abspath, isfile, isdir, join
-from os import listdir
+import json
 import StringIO
 import tarfile
 import hashlib
+import base64
+from struct import unpack
+from glob import iglob
+
+
+def get_all_7_char_chunks(h):
+    return set((unpack("<Q", base64.b64decode(h[i:i+7] + "=") + "\x00\x00\x00")[0] for i in xrange(len(h) - 6)))
+
+
+def preprocess_hash(h):
+    block_size, h = h.split(":", 1)
+    block_size = int(block_size)
+
+    # Reduce any sequence of the same char greater than 3 to 3
+    for c in set(list(h)):
+        while c * 4 in h:
+            h = h.replace(c * 4, c * 3)
+
+    block_data, double_block_data = h.split(":")
+
+    return block_size, get_all_7_char_chunks(block_data), get_all_7_char_chunks(double_block_data)
 
 
 def enumerate_paths(path_list, recursive_scan):
@@ -15,7 +36,7 @@ def enumerate_paths(path_list, recursive_scan):
         if isfile(file_path):
             ret_paths.append(file_path)
         elif isdir(file_path):
-            for p in listdir(file_path):
+            for p in iglob(join(file_path, "*")):
                 p = join(file_path, p)
                 if isfile(p) or (isdir(p) and recursive_scan):
                     path_list.append(p)
@@ -64,7 +85,7 @@ def generate_gexf(bin_scores):
 
 
 def get_version():
-    return "1.0.0"
+    return "1.1.0"
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
@@ -80,32 +101,59 @@ if __name__ == "__main__":
                         help="Scan paths recursively")
     parser.add_argument('-o', '--output', metavar='output', type=str, nargs='?', default="output.tar",
                         help="Path to write the resulting tarball to (default=output.tar)")
+    parser.add_argument('-s', '--storefiles', default=False, required=False, action='store_true',
+                        help="Store files in output tar")
 
     args = parser.parse_args()
     root_path = args.path
     paths = enumerate_paths(root_path, args.recursive)
     hashes = {}
     sha256s = {}
-
-    #hashing files
-    for path in paths:
-        hashes[path] = pydeep.hash_file(path)
-        sha256s[path] = hashlib.sha256(file(path, 'rb').read()).hexdigest()
-        print "{0}\tSHA256: {1}\tssdeep: {2}".format(path, sha256s[path], hashes[path])
+    integerdb = {}
 
     matches = {}
     scores = {}
-    for path in hashes.keys():
-        matches[path] = []
-        for other in hashes.keys():
-            if other != path:
-                score = pydeep.compare(hashes[path], hashes[other])
-                if score > 0:
-                    matches[path].append(other)
-                    if path not in scores:
-                        scores[path] = {}
-                    if other not in scores[path]:
-                        scores[path][other] = score
+
+    def add_to_integer_db(block_size, chunk, path):
+        global integerdb
+        if block_size not in integerdb:
+            integerdb[block_size] = {}
+
+        similar_to = set()
+        for i in chunk:
+            if i not in integerdb[block_size]:
+                integerdb[block_size][i] = set()
+            else:
+                    similar_to |= integerdb[block_size][i]
+            integerdb[block_size][i].add(path)
+
+        return similar_to
+
+    for path in paths:
+        hashes[path] = pydeep.hash_file(path)
+        sha256s[path] = hashlib.sha256(file(path, 'rb').read()).hexdigest()
+        block_size, chunk, double_chunk = preprocess_hash(hashes[path])
+
+        similar_to = add_to_integer_db(block_size, chunk, path) | add_to_integer_db(block_size * 2, double_chunk, path)
+
+        h = hashes[path]
+        matches[path] = set()
+        for other in similar_to:
+            score = pydeep.compare(h, hashes[other])
+            if score > 0:
+                matches[path].add(other)
+                matches[other].add(path)
+                if path not in scores:
+                    scores[path] = {}
+                if other not in scores[path]:
+                    scores[path][other] = score
+
+                if other not in scores:
+                    scores[other] = {}
+                if path not in scores[other]:
+                    scores[other][path] = score
+
+        print "{0}\tSHA256: {1}\tssdeep: {2}".format(path, sha256s[path], hashes[path])
 
     groups = []
     for path in matches.keys():
@@ -129,15 +177,24 @@ if __name__ == "__main__":
 
     # Copy files to zipfile
     with tarfile.TarFile(args.output, mode='a') as mytar:
-        for group in xrange(len(groups)):
-            for path in groups[group]:
-                mytar.add(path, arcname=join(str(group), sha256s[path]))
+        if args.storefiles:
+            for group in xrange(len(groups)):
+                for path in groups[group]:
+                    mytar.add(path, arcname=join(str(group), sha256s[path]))
+
         gexf_tar_file = StringIO.StringIO()
         gexf_tar_file.write(generate_gexf(scores))
         gexf_tar_file.seek(0)
         info = tarfile.TarInfo(name="file_distance.gexf")
         info.size = len(gexf_tar_file.buf)
         mytar.addfile(tarinfo=info, fileobj=gexf_tar_file)
+
+        json_tar_file = StringIO.StringIO()
+        json_tar_file.write(json.dumps({"groups": groups, "hashes": hashes}))
+        json_tar_file.seek(0)
+        info = tarfile.TarInfo(name="groups.json")
+        info.size = len(json_tar_file.buf)
+        mytar.addfile(tarinfo=info, fileobj=json_tar_file)
 
     print "{0} files organized into {1} groups".format(len(hashes), len(groups))
     print "Groups distribution:"

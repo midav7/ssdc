@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name='ssdc',
-      version='1.0.0',
+      version='1.1.0',
       description='Clusters files based on their ssdeep hash',
       author='Brian Wallace',
       author_email='bwall@ballastsecurity.net',

@@ -18,19 +18,20 @@ Examples
 help
 ----
     bwall@highwind:~$ ssdc -h
-    usage: ssdc [-h] [-v] [-r] [-o [output]] path [path ...]
-
+    usage: /usr/local/bin/ssdc [-h] [-v] [-r] [-o [output]] [-s] path [path ...]
+    
     Clusters files based on their ssdeep hash
-
+    
     positional arguments:
       path                  Paths to files or directories to scan
-
+    
     optional arguments:
       -h, --help            show this help message and exit
       -v, --version         show program's version number and exit
       -r, --recursive       Scan paths recursively
       -o [output], --output [output]
                             Path to write the resulting tarball to
-                            (default=output.tar
-
-    ssdc v1.0.0 by Brian Wallace (@botnet_hunter)
+                            (default=output.tar)
+      -s, --storefiles      Store files in output tar
+    
+    /usr/local/bin/ssdc v1.1.0 by Brian Wallace (@botnet_hunter)
