@@ -103,8 +103,16 @@ if __name__ == "__main__":
                         help="Path to write the resulting tarball to (default=output.tar)")
     parser.add_argument('-s', '--storefiles', default=False, required=False, action='store_true',
                         help="Store files in output tar")
+    parser.add_argument('-d', '--dontcompute', default=False, required=False, action='store_true',
+                        help="Treat input as ssDeep hashes")
 
     args = parser.parse_args()
+
+    if args.dontcompute and args.storefiles:
+        print "Unfortunately, we can't store files which are not provided as input, arguments are conflicting"
+        import sys
+        sys.exit(1)
+
     root_path = args.path
     paths = enumerate_paths(root_path, args.recursive)
     hashes = {}
@@ -129,9 +137,29 @@ if __name__ == "__main__":
 
         return similar_to
 
+    if args.dontcompute:
+        real_paths = set()
+        for path in paths:
+            with open(path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if len(line) == 0:
+                        continue
+                    real_paths.add(line)
+        paths = list(real_paths)
+
     for path in paths:
-        hashes[path] = pydeep.hash_file(path)
-        sha256s[path] = hashlib.sha256(file(path, 'rb').read()).hexdigest()
+        if not args.dontcompute:
+            hashes[path] = pydeep.hash_file(path)
+            sha256s[path] = hashlib.sha256(file(path, 'rb').read()).hexdigest()
+        else:
+            if "," in path:
+                shash, path = path.split(",", 1)
+                path = path.strip('"')
+            else:
+                shash = path
+            hashes[path] = shash
+            sha256s[path] = hashlib.sha256(file(path, 'rb').read()).hexdigest() if isfile(path) else hashlib.sha256(path).hexdigest()
         block_size, chunk, double_chunk = preprocess_hash(hashes[path])
 
         similar_to = add_to_integer_db(block_size, chunk, path) | add_to_integer_db(block_size * 2, double_chunk, path)
