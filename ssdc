@@ -85,7 +85,7 @@ def generate_gexf(bin_scores):
 
 
 def get_version():
-    return "1.1.0"
+    return "1.2.0"
 
 if __name__ == "__main__":
     from argparse import ArgumentParser

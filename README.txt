@@ -18,7 +18,7 @@ Examples
 help
 ----
     bwall@highwind:~$ ssdc -h
-    usage: /usr/local/bin/ssdc [-h] [-v] [-r] [-o [output]] [-s] path [path ...]
+    usage: ssdc [-h] [-v] [-r] [-o [output]] [-s] [-d] path [path ...]
 
     Clusters files based on their ssdeep hash
 
@@ -33,5 +33,6 @@ help
                             Path to write the resulting tarball to
                             (default=output.tar)
       -s, --storefiles      Store files in output tar
+      -d, --dontcompute     Treat input as ssDeep hashes
 
-    /usr/local/bin/ssdc v1.1.0 by Brian Wallace (@botnet_hunter)
+    ssdc v1.2.0 by Brian Wallace (@botnet_hunter)
