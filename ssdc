@@ -1,5 +1,5 @@
 #!/usr/bin/env python2
-import pydeep
+import ssdeep
 from os.path import abspath, isfile, isdir, join
 import json
 import StringIO
@@ -105,6 +105,8 @@ if __name__ == "__main__":
                         help="Store files in output tar")
     parser.add_argument('-d', '--dontcompute', default=False, required=False, action='store_true',
                         help="Treat input as ssDeep hashes")
+    parser.add_argument('-sc', '--score', default=50, nargs='?', action='store', type=int, const=50,
+                        help="Numeric score (from 1 to 100) to compare ssDeep hashes, default 50")
 
     args = parser.parse_args()
 
@@ -150,7 +152,7 @@ if __name__ == "__main__":
 
     for path in paths:
         if not args.dontcompute:
-            hashes[path] = pydeep.hash_file(path)
+            hashes[path] = ssdeep.hash(path)
             sha256s[path] = hashlib.sha256(file(path, 'rb').read()).hexdigest()
         else:
             if "," in path:
@@ -167,8 +169,8 @@ if __name__ == "__main__":
         h = hashes[path]
         matches[path] = set()
         for other in similar_to:
-            score = pydeep.compare(h, hashes[other])
-            if score > 0:
+            score = ssdeep.compare(h, hashes[other])
+            if score > args.score:
                 matches[path].add(other)
                 matches[other].add(path)
                 if path not in scores:
