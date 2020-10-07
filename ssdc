@@ -220,7 +220,7 @@ if __name__ == "__main__":
         mytar.addfile(tarinfo=info, fileobj=gexf_tar_file)
 
         json_tar_file = StringIO.StringIO()
-        json_tar_file.write(json.dumps({"groups": groups, "hashes": hashes}))
+        json_tar_file.write(json.dumps({"groups": groups, "hashes": hashes}, indent=4))
         json_tar_file.seek(0)
         info = tarfile.TarInfo(name="groups.json")
         info.size = len(json_tar_file.buf)
